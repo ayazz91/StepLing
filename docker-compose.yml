@@ -1,0 +1,19 @@
+services:
+  tutor-bot:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      DATABASE_PATH: /app/data/tutor.sqlite3
+    volumes:
+      - tutor-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  tutor-data:

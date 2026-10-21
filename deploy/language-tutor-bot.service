@@ -1,0 +1,22 @@
+[Unit]
+Description=Telegram language tutor bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=language-tutor
+Group=language-tutor
+WorkingDirectory=/opt/language-tutor-bot
+EnvironmentFile=/opt/language-tutor-bot/.env
+ExecStart=/opt/language-tutor-bot/.venv/bin/python -m bot.main
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/language-tutor-bot/data
+
+[Install]
+WantedBy=multi-user.target

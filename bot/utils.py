@@ -3,11 +3,31 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 VOCAB_MARKER = re.compile(r"\[\[VOCAB_JSON\]\](.*?)\[\[/VOCAB_JSON\]\]", re.DOTALL)
 CORRECTION_PATTERN = re.compile(r"❌\s*(.*?)\s*→\s*✅\s*(.*?)(?:\s*\+|$)")
+
+
+def normalize_review_answer(answer: str) -> str:
+    """Normalize casing, spacing, and surrounding punctuation but preserve accents."""
+    normalized = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", answer).casefold()).strip()
+    while normalized and unicodedata.category(normalized[0]).startswith("P"):
+        normalized = normalized[1:].lstrip()
+    while normalized and unicodedata.category(normalized[-1]).startswith("P"):
+        normalized = normalized[:-1].rstrip()
+    return normalized
+
+
+def matches_review_answer(answer: str, accepted_translations: list[str]) -> bool:
+    """Check an answer against the primary translation and its accepted alternatives."""
+    normalized_answer = normalize_review_answer(answer)
+    return normalized_answer in {
+        normalize_review_answer(translation)
+        for translation in accepted_translations
+    }
 
 
 def split_message(text: str, limit: int = 4096) -> list[str]:

@@ -1,7 +1,12 @@
 import pytest
 
-from bot.handlers.vocab import _matches_review_answer
-from bot.utils import parse_vocab_marker, split_message, validate_timezone
+from bot.utils import (
+    matches_review_answer,
+    normalize_review_answer,
+    parse_vocab_marker,
+    split_message,
+    validate_timezone,
+)
 
 
 @pytest.mark.parametrize("text,limit", [
@@ -41,11 +46,15 @@ def test_vocab_marker_parses_distinct_alternative_translations() -> None:
 
 @pytest.mark.parametrize("answer", [" HOME ", "home!", "Home.", "home"])
 def test_review_accepts_normalized_alternative_translations(answer: str) -> None:
-    assert _matches_review_answer(answer, ["house", "home"])
+    assert matches_review_answer(answer, ["house", "home"])
 
 
 def test_review_answer_matching_preserves_meaningful_accents() -> None:
-    assert not _matches_review_answer("si", ["sí"])
+    assert not matches_review_answer("si", ["sí"])
+
+
+def test_review_answer_normalization_handles_unicode_spacing_and_punctuation() -> None:
+    assert normalize_review_answer("  ＨＯＭＥ,\n sweet   home! ") == "home, sweet home"
 
 
 def test_invalid_vocab_marker_is_hidden_without_failing_the_turn() -> None:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,7 +13,7 @@ from aiogram.types import Message
 
 from bot import texts
 from bot.db.repository import Repository
-from bot.utils import split_message
+from bot.utils import matches_review_answer, split_message
 
 router = Router(name="vocabulary")
 
@@ -66,25 +64,6 @@ async def _ask_review_word(message: Message, word: dict[str, Any]) -> None:
     await message.answer(texts.REVIEW_PROMPT.format(word=word["word"]))
 
 
-def _normalize_review_answer(answer: str) -> str:
-    """Normalize casing, spacing, and surrounding punctuation but preserve accents."""
-    normalized = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", answer).casefold()).strip()
-    while normalized and unicodedata.category(normalized[0]).startswith("P"):
-        normalized = normalized[1:].lstrip()
-    while normalized and unicodedata.category(normalized[-1]).startswith("P"):
-        normalized = normalized[:-1].rstrip()
-    return normalized
-
-
-def _matches_review_answer(answer: str, accepted_translations: list[str]) -> bool:
-    """Check an answer against the primary translation and its accepted alternatives."""
-    normalized_answer = _normalize_review_answer(answer)
-    return normalized_answer in {
-        _normalize_review_answer(translation)
-        for translation in accepted_translations
-    }
-
-
 @router.message(Review.waiting_for_answer)
 async def check_review_answer(
     message: Message, state: FSMContext, repository: Repository,
@@ -102,7 +81,7 @@ async def check_review_answer(
         return
     word = words[index]
     accepted_translations = [word["translation"], *word["alternatives"]]
-    correct = _matches_review_answer(message.text or "", accepted_translations)
+    correct = matches_review_answer(message.text or "", accepted_translations)
     await repository.update_review(int(word["id"]), correct)
     if correct:
         await message.answer(texts.REVIEW_CORRECT)

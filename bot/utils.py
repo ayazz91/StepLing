@@ -53,7 +53,7 @@ def validate_timezone(value: str) -> str | None:
         return None
 
 
-def parse_vocab_marker(response: str) -> tuple[str, list[dict[str, str]]]:
+def parse_vocab_marker(response: str) -> tuple[str, list[dict[str, Any]]]:
     """Strip and parse an optional machine-readable vocabulary marker."""
     match = VOCAB_MARKER.search(response)
     if not match:
@@ -65,11 +65,26 @@ def parse_vocab_marker(response: str) -> tuple[str, list[dict[str, str]]]:
     except json.JSONDecodeError:
         return VOCAB_MARKER.sub("", response).strip(), []
     words = payload.get("items", []) if isinstance(payload, dict) else []
-    valid = [
-        {key: str(item.get(key, "")).strip() for key in ("word", "translation", "example")}
-        for item in words
-        if isinstance(item, dict) and item.get("word") and item.get("translation")
-    ]
+    valid: list[dict[str, Any]] = []
+    for item in words:
+        if not isinstance(item, dict) or not item.get("word") or not item.get("translation"):
+            continue
+        word = {
+            key: str(item.get(key, "")).strip()
+            for key in ("word", "translation", "example")
+        }
+        alternatives = item.get("alternatives", [])
+        if isinstance(alternatives, list):
+            parsed_alternatives = list(dict.fromkeys(
+                value.strip()
+                for value in alternatives
+                if isinstance(value, str)
+                and value.strip()
+                and value.strip().casefold() != word["translation"].casefold()
+            ))
+            if parsed_alternatives:
+                word["alternatives"] = parsed_alternatives
+        valid.append(word)
     return VOCAB_MARKER.sub("", response).strip(), valid
 
 
@@ -77,4 +92,3 @@ def extract_corrections(response: str) -> list[tuple[str, str]]:
     """Extract learner errors and their corrections from tutor response text."""
     return [(match.group(1).strip(), match.group(2).strip())
             for match in CORRECTION_PATTERN.finditer(response)]
-

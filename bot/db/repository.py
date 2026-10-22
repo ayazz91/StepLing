@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
+from collections.abc import Sequence
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -21,11 +23,21 @@ class Repository:
     """Provide typed, parameterized operations on the bot database."""
 
     def __init__(
-        self, connection: aiosqlite.Connection, gemini_daily_request_limit: int = 100,
+        self,
+        connection: aiosqlite.Connection,
+        gemini_daily_request_limit: int = 100,
+        review_intervals_days: tuple[int, ...] = LEITNER_DAYS,
     ) -> None:
         """Create a repository bound to an open SQLite connection."""
+        if (
+            len(review_intervals_days) != len(LEITNER_DAYS)
+            or any(days <= 0 for days in review_intervals_days)
+            or tuple(sorted(set(review_intervals_days))) != review_intervals_days
+        ):
+            raise ValueError("Review intervals must be five strictly increasing positive integers")
         self.connection = connection
         self.gemini_daily_request_limit = gemini_daily_request_limit
+        self.review_intervals_days = review_intervals_days
 
     async def create_user(self, telegram_id: int, profile: dict[str, str]) -> None:
         """Insert or update a completed onboarding profile."""
@@ -175,21 +187,40 @@ class Repository:
         return streak
 
     async def add_vocabulary(
-        self, telegram_id: int, word: str, translation: str, example: str = "",
+        self,
+        telegram_id: int,
+        word: str,
+        translation: str,
+        example: str = "",
+        alternatives: Sequence[str] = (),
     ) -> None:
         """Add a word unless it is already present for the user."""
         now = utc_now()
+        cleaned_alternatives = list(dict.fromkeys(
+            alternative.strip()
+            for alternative in alternatives
+            if alternative.strip() and alternative.strip().casefold() != translation.strip().casefold()
+        ))
         await self.connection.execute(
             """INSERT INTO vocabulary
-               (user_id, word, translation, example, box, next_review, created_at)
-               VALUES (?, ?, ?, ?, 1, ?, ?)
+               (user_id, word, translation, alternatives, example, box, next_review, created_at)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?)
                ON CONFLICT(user_id, word) DO NOTHING""",
             (
-                telegram_id, word.strip(), translation.strip(), example.strip(),
+                telegram_id, word.strip(), translation.strip(),
+                json.dumps(cleaned_alternatives, ensure_ascii=False), example.strip(),
                 now.isoformat(), now.isoformat(),
             ),
         )
         await self.connection.commit()
+
+    @staticmethod
+    def _decode_vocabulary(rows: Sequence[aiosqlite.Row]) -> list[dict[str, Any]]:
+        """Decode stored alternative translations for vocabulary results."""
+        words = [dict(row) for row in rows]
+        for word in words:
+            word["alternatives"] = json.loads(word["alternatives"])
+        return words
 
     async def list_vocabulary(self, telegram_id: int, limit: int = 20) -> list[dict[str, Any]]:
         """Return a user's newest saved words."""
@@ -197,7 +228,7 @@ class Repository:
             "SELECT * FROM vocabulary WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
             (telegram_id, limit),
         )
-        return [dict(row) for row in await cursor.fetchall()]
+        return self._decode_vocabulary(await cursor.fetchall())
 
     async def due_vocabulary(self, telegram_id: int, now: datetime | None = None) -> list[dict[str, Any]]:
         """Return words whose scheduled review time has arrived."""
@@ -205,7 +236,7 @@ class Repository:
             "SELECT * FROM vocabulary WHERE user_id = ? AND next_review <= ? ORDER BY next_review",
             (telegram_id, (now or utc_now()).isoformat()),
         )
-        return [dict(row) for row in await cursor.fetchall()]
+        return self._decode_vocabulary(await cursor.fetchall())
 
     async def update_review(self, word_id: int, correct: bool, now: datetime | None = None) -> None:
         """Advance a correct word or reset a missed word to the first Leitner box."""
@@ -215,7 +246,7 @@ class Repository:
         if row is None:
             return
         box = min(int(row["box"]) + 1, 5) if correct else 1
-        due_at = current + timedelta(days=LEITNER_DAYS[box - 1])
+        due_at = current + timedelta(days=self.review_intervals_days[box - 1])
         await self.connection.execute(
             "UPDATE vocabulary SET box = ?, next_review = ? WHERE id = ?",
             (box, due_at.isoformat(), word_id),

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS vocabulary (
     user_id INTEGER NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
     word TEXT NOT NULL,
     translation TEXT NOT NULL,
+    alternatives TEXT NOT NULL DEFAULT '[]',
     example TEXT NOT NULL DEFAULT '',
     box INTEGER NOT NULL DEFAULT 1 CHECK (box BETWEEN 1 AND 5),
     next_review TEXT NOT NULL,
@@ -86,6 +87,12 @@ class Database:
         if "placement_started_at" not in columns:
             await self.connection.execute(
                 "ALTER TABLE users ADD COLUMN placement_started_at TEXT"
+            )
+        cursor = await self.connection.execute("PRAGMA table_info(vocabulary)")
+        vocabulary_columns = {row["name"] for row in await cursor.fetchall()}
+        if "alternatives" not in vocabulary_columns:
+            await self.connection.execute(
+                "ALTER TABLE vocabulary ADD COLUMN alternatives TEXT NOT NULL DEFAULT '[]'"
             )
         await self.connection.commit()
         return self.connection

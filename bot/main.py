@@ -106,7 +106,11 @@ async def run(settings_value: Settings) -> None:
     dispatcher: Dispatcher | None = None
     try:
         connection = await database.connect()
-        repository = Repository(connection, settings_value.gemini_daily_request_limit)
+        repository = Repository(
+            connection,
+            settings_value.gemini_daily_request_limit,
+            settings_value.review_intervals_days,
+        )
         llm = TutorLLM(settings_value.gemini_api_key, settings_value.gemini_model)
         bot = Bot(token=settings_value.telegram_bot_token)
         rate_limiter = RateLimiter(settings_value.rate_limit_per_minute)

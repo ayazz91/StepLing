@@ -65,9 +65,12 @@ async def test_daily_gemini_request_limit_resets_by_utc_day(repository: Reposito
 @pytest.mark.asyncio
 async def test_vocabulary_review_intervals_and_stats(repository: Repository) -> None:
     await add_user(repository)
-    await repository.add_vocabulary(42, "viaje", "trip", "Buen viaje.")
+    await repository.add_vocabulary(
+        42, "viaje", "trip", "Buen viaje.", alternatives=["journey", "TRIP"]
+    )
     words = await repository.due_vocabulary(42)
     assert len(words) == 1
+    assert words[0]["alternatives"] == ["journey"]
     word_id = int(words[0]["id"])
     moment = datetime(2026, 10, 21, 12, tzinfo=UTC)
 
@@ -87,6 +90,62 @@ async def test_vocabulary_review_intervals_and_stats(repository: Repository) -> 
     assert stats["words"] == 1
     mistakes = await repository.known_mistakes(42)
     assert mistakes[0]["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_review_uses_configured_intervals(repository: Repository) -> None:
+    custom_repository = Repository(
+        repository.connection, review_intervals_days=(2, 5, 10, 20, 40)
+    )
+    await add_user(custom_repository)
+    await custom_repository.add_vocabulary(42, "viaje", "trip")
+    word_id = int((await custom_repository.due_vocabulary(42))[0]["id"])
+    moment = datetime(2026, 10, 21, 12, tzinfo=UTC)
+
+    await custom_repository.update_review(word_id, correct=True, now=moment)
+
+    reviewed = await custom_repository.list_vocabulary(42)
+    assert reviewed[0]["box"] == 2
+    assert datetime.fromisoformat(reviewed[0]["next_review"]) == moment + timedelta(days=5)
+
+
+@pytest.mark.asyncio
+async def test_database_migrates_existing_vocabulary_table(tmp_path: Path) -> None:
+    path = tmp_path / "legacy-vocabulary.sqlite3"
+    connection = await aiosqlite.connect(path)
+    await connection.executescript(
+        """CREATE TABLE users (
+            telegram_id INTEGER PRIMARY KEY, native_lang TEXT NOT NULL,
+            target_lang TEXT NOT NULL, level TEXT NOT NULL, goal TEXT NOT NULL,
+            interests TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'dialogue',
+            timezone TEXT NOT NULL DEFAULT 'UTC', reminder_time TEXT,
+            streak INTEGER NOT NULL DEFAULT 0, last_active TEXT, created_at TEXT NOT NULL
+        );
+        CREATE TABLE vocabulary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL, word TEXT NOT NULL, translation TEXT NOT NULL,
+            example TEXT NOT NULL DEFAULT '', box INTEGER NOT NULL DEFAULT 1,
+            next_review TEXT NOT NULL, created_at TEXT NOT NULL,
+            UNIQUE(user_id, word)
+        );
+        INSERT INTO users VALUES
+            (42, 'Russian', 'Spanish', 'A2', 'Travel', '', 'dialogue',
+             'UTC', NULL, 0, NULL, '2026-10-21T12:00:00+00:00');
+        INSERT INTO vocabulary
+            (user_id, word, translation, example, box, next_review, created_at)
+            VALUES (42, 'casa', 'house', '', 1, '2026-10-21T12:00:00+00:00',
+                    '2026-10-21T12:00:00+00:00');
+        """
+    )
+    await connection.commit()
+    await connection.close()
+
+    database = Database(path)
+    migrated = await database.connect()
+    repository = Repository(migrated)
+    words = await repository.list_vocabulary(42)
+    assert words[0]["alternatives"] == []
+    await database.close()
 
 
 @pytest.mark.asyncio

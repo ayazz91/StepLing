@@ -17,7 +17,8 @@ class MockTutor:
             "[[QUIZ_RESULT]]correct[[/QUIZ_RESULT]] "
             "[[LEVEL_ESTIMATE]]A2[[/LEVEL_ESTIMATE]]\n"
             '[[VOCAB_JSON]]{"items":[{"word":"ayer","translation":"yesterday",'
-            '"example":"Lo vi ayer."}]}[[/VOCAB_JSON]]'
+            '"alternatives":["the day before"],"example":"Lo vi ayer."}]}'
+            '[[/VOCAB_JSON]]'
         )
 
 
@@ -48,6 +49,7 @@ async def test_tutor_turn_persists_clean_reply_vocabulary_mistakes_and_level() -
         assert user is not None and user["level"] == "A2"
         words = await repository.list_vocabulary(19)
         assert words[0]["word"] == "ayer"
+        assert words[0]["alternatives"] == ["the day before"]
         mistakes = await repository.known_mistakes(19)
         assert mistakes[0]["category"] == "i goes"
         history = await repository.get_history(19)

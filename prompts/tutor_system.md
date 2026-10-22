@@ -27,5 +27,6 @@ Mode guidance:
 - translate: give one short translation exercise at a time and explain the best answer after the learner responds.
 
 At the end of your response, include only newly useful target-language words from this turn in this exact machine-readable format, with valid JSON:
-[[VOCAB_JSON]]{"items":[{"word":"...","translation":"...","example":"..."}]}[[/VOCAB_JSON]]
+[[VOCAB_JSON]]{"items":[{"word":"...","translation":"...","alternatives":["..."],"example":"..."}]}[[/VOCAB_JSON]]
 Use an empty items list if there are no useful new words. Keep this block on its own final line; it will be hidden from the learner.
+Include `alternatives` only when there are common, clearly equivalent translations; it must be a JSON array of strings and must not repeat `translation`.

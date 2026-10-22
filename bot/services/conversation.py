@@ -91,7 +91,11 @@ async def tutor_turn(
     await repository.save_message(telegram_id, "assistant", response)
     for item in new_words:
         await repository.add_vocabulary(
-            telegram_id, item["word"], item["translation"], item["example"]
+            telegram_id,
+            item["word"],
+            item["translation"],
+            item["example"],
+            item.get("alternatives", []),
         )
     for incorrect, corrected in extract_corrections(response):
         await repository.record_mistake(

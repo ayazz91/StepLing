@@ -10,6 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_REVIEW_INTERVALS_DAYS = (1, 3, 7, 14, 30)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,7 @@ class Settings:
     admin_ids: frozenset[int]
     allowed_user_ids: frozenset[int] | None
     prompt_path: Path
+    review_intervals_days: tuple[int, ...] = DEFAULT_REVIEW_INTERVALS_DAYS
 
 
 def _parse_ids(value: str, name: str) -> frozenset[int]:
@@ -37,6 +39,25 @@ def _parse_ids(value: str, name: str) -> frozenset[int]:
         return frozenset(int(item.strip()) for item in value.split(",") if item.strip())
     except ValueError as exc:
         raise ValueError(f"{name} must contain comma-separated integer Telegram IDs") from exc
+
+
+def _parse_review_intervals(value: str) -> tuple[int, ...]:
+    """Parse five increasing positive review intervals, one for each Leitner box."""
+    try:
+        intervals = tuple(int(item.strip()) for item in value.split(","))
+    except ValueError as exc:
+        raise ValueError(
+            "REVIEW_INTERVALS_DAYS must contain five comma-separated positive integers"
+        ) from exc
+    if (
+        len(intervals) != len(DEFAULT_REVIEW_INTERVALS_DAYS)
+        or any(days <= 0 for days in intervals)
+        or tuple(sorted(set(intervals))) != intervals
+    ):
+        raise ValueError(
+            "REVIEW_INTERVALS_DAYS must contain five strictly increasing positive integers"
+        )
+    return intervals
 
 
 def load_settings() -> Settings:
@@ -83,4 +104,7 @@ def load_settings() -> Settings:
         admin_ids=_parse_ids(os.getenv("ADMIN_IDS", ""), "ADMIN_IDS"),
         allowed_user_ids=allowed_ids,
         prompt_path=Path(os.getenv("PROMPT_PATH", str(PROJECT_ROOT / "prompts" / "tutor_system.md"))),
+        review_intervals_days=_parse_review_intervals(
+            os.getenv("REVIEW_INTERVALS_DAYS", ",".join(map(str, DEFAULT_REVIEW_INTERVALS_DAYS)))
+        ),
     )

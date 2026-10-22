@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bot.services.llm import TutorLLM
+from bot.services.llm import TutorLLM, TutorTimeoutError
 from bot.services.rate_limit import RateLimiter
 
 
@@ -54,6 +54,21 @@ async def test_llm_retries_two_transient_server_errors(monkeypatch: pytest.Monke
     assert await llm.respond("prompt", [{"role": "user", "content": "hello"}]) == "Recovered"
     assert generate_content.await_count == 3
     assert [call.args[0] for call in sleep.await_args_list] == [0.5, 1.0]
+
+
+@pytest.mark.asyncio
+async def test_llm_reports_timeouts_with_a_typed_error() -> None:
+    generate_content = AsyncMock(side_effect=TimeoutError)
+    client = SimpleNamespace(
+        aio=SimpleNamespace(
+            models=SimpleNamespace(generate_content=generate_content),
+            aclose=AsyncMock(),
+        )
+    )
+    llm = TutorLLM("not-a-real-key", "gemini-test", client=client)
+
+    with pytest.raises(TutorTimeoutError):
+        await llm.respond("prompt", [{"role": "user", "content": "hello"}])
 
 
 def test_rate_limiter_uses_a_rolling_window() -> None:

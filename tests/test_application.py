@@ -11,6 +11,8 @@ def test_dispatcher_registers_all_feature_routers_and_middleware() -> None:
         gemini_api_key="test-key",
         gemini_model="gemini-test",
         database_path=Path(":memory:"),
+        redis_url=None,
+        gemini_daily_request_limit=100,
         log_level=20,
         rate_limit_per_minute=10,
         admin_ids=frozenset(),

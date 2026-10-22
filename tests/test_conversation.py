@@ -4,7 +4,7 @@ import pytest
 
 from bot.db.database import Database
 from bot.db.repository import Repository
-from bot.services.conversation import tutor_turn
+from bot.services.conversation import DailyGeminiLimitExceeded, tutor_turn
 
 
 class MockTutor:
@@ -52,5 +52,35 @@ async def test_tutor_turn_persists_clean_reply_vocabulary_mistakes_and_level() -
         assert mistakes[0]["category"] == "i goes"
         history = await repository.get_history(19)
         assert "[[" not in history[-1]["content"]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_does_not_save_unanswered_message() -> None:
+    database = Database(Path(":memory:"))
+    connection = await database.connect()
+    repository = Repository(connection, gemini_daily_request_limit=1)
+    await repository.create_user(19, {
+        "native_lang": "Russian",
+        "target_lang": "Spanish",
+        "level": "A2",
+        "goal": "Travel",
+        "interests": "",
+        "timezone": "UTC",
+        "reminder_time": "",
+    })
+
+    class Tutor:
+        async def respond(self, system_prompt: str, history: list[dict[str, str]]) -> str:
+            return "Hola"
+
+    try:
+        await tutor_turn(19, "First message", repository, Tutor(), "prompt")
+        with pytest.raises(DailyGeminiLimitExceeded):
+            await tutor_turn(19, "Blocked message", repository, Tutor(), "prompt")
+
+        history = await repository.get_history(19)
+        assert [item["content"] for item in history] == ["First message", "Hola"]
     finally:
         await database.close()

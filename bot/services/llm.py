@@ -14,6 +14,14 @@ from google.genai import types
 logger = logging.getLogger(__name__)
 
 
+class TutorTimeoutError(RuntimeError):
+    """Raised when the Gemini request exceeds its configured timeout."""
+
+
+class TutorTemporarilyUnavailableError(RuntimeError):
+    """Raised when Gemini remains rate-limited or unavailable after retries."""
+
+
 class TutorLLM:
     """Generate tutor responses using the official Google GenAI async client."""
 
@@ -49,14 +57,18 @@ class TutorLLM:
                 if not text:
                     raise RuntimeError("Gemini returned an empty response")
                 return str(text).strip()
-            except asyncio.TimeoutError:
-                raise
+            except asyncio.TimeoutError as exc:
+                logger.warning("Gemini request timed out after %.1fs", self.timeout_seconds)
+                raise TutorTimeoutError("Gemini request timed out") from exc
             except Exception as exc:
                 status = self._status_code(exc)
                 if status != 429 and not (status is not None and 500 <= status <= 599):
                     raise
                 if attempt == 2:
-                    raise
+                    logger.error("Gemini remains unavailable after retries (HTTP %s)", status)
+                    raise TutorTemporarilyUnavailableError(
+                        f"Gemini remained unavailable (HTTP {status})"
+                    ) from exc
                 delay = 0.5 * (2 ** attempt) + random.uniform(0, 0.2)
                 logger.warning("Gemini transient HTTP %s; retrying in %.1fs", status, delay)
                 await asyncio.sleep(delay)

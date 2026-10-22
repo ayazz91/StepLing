@@ -20,6 +20,8 @@ class Settings:
     gemini_api_key: str
     gemini_model: str
     database_path: Path
+    redis_url: str | None
+    gemini_daily_request_limit: int
     log_level: int
     rate_limit_per_minute: int
     admin_ids: frozenset[int]
@@ -54,6 +56,13 @@ def load_settings() -> Settings:
     if rate_limit < 1:
         raise ValueError("RATE_LIMIT_PER_MINUTE must be a positive integer")
 
+    try:
+        daily_request_limit = int(os.getenv("GEMINI_DAILY_REQUEST_LIMIT", "100"))
+    except ValueError as exc:
+        raise ValueError("GEMINI_DAILY_REQUEST_LIMIT must be a non-negative integer") from exc
+    if daily_request_limit < 0:
+        raise ValueError("GEMINI_DAILY_REQUEST_LIMIT must be a non-negative integer")
+
     log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     log_level = getattr(logging, log_level_name, None)
     if not isinstance(log_level, int):
@@ -67,6 +76,8 @@ def load_settings() -> Settings:
         gemini_api_key=gemini_key,
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip(),
         database_path=Path(os.getenv("DATABASE_PATH", "data/tutor.sqlite3")),
+        redis_url=os.getenv("REDIS_URL", "").strip() or None,
+        gemini_daily_request_limit=daily_request_limit,
         log_level=log_level,
         rate_limit_per_minute=rate_limit,
         admin_ids=_parse_ids(os.getenv("ADMIN_IDS", ""), "ADMIN_IDS"),

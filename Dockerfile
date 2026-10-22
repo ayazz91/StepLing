@@ -8,8 +8,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 10001 botuser \
-    && mkdir -p /app/data \
-    && chown botuser:botuser /app/data
+    && mkdir -p /app/data /app/backups \
+    && chown botuser:botuser /app/data /app/backups
 
 COPY bot ./bot
 COPY prompts ./prompts

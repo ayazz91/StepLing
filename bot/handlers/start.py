@@ -21,8 +21,8 @@ from bot.keyboards import (
     reminder_keyboard,
     target_language_keyboard,
 )
-from bot.services.conversation import tutor_turn
-from bot.services.llm import TutorLLM
+from bot.services.conversation import DailyGeminiLimitExceeded, tutor_turn
+from bot.services.llm import TutorLLM, TutorTemporarilyUnavailableError, TutorTimeoutError
 from bot.utils import split_message, validate_timezone
 
 logger = logging.getLogger(__name__)
@@ -240,6 +240,12 @@ async def _complete_onboarding(
         )
         for chunk in split_message(reply.text):
             await message.answer(chunk)
+    except DailyGeminiLimitExceeded:
+        await message.answer(texts.GEMINI_DAILY_LIMIT)
+    except TutorTimeoutError:
+        await message.answer(texts.LLM_TIMEOUT)
+    except TutorTemporarilyUnavailableError:
+        await message.answer(texts.LLM_TEMPORARY_ERROR)
     except Exception:
         logger.exception("Failed to generate onboarding welcome for user %s", user_id)
         await message.answer(texts.LLM_ERROR)

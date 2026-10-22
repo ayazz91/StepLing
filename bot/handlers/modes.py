@@ -13,8 +13,8 @@ from aiogram.types import Message
 from bot import texts
 from bot.db.repository import Repository
 from bot.keyboards import main_menu_keyboard
-from bot.services.conversation import tutor_turn
-from bot.services.llm import TutorLLM
+from bot.services.conversation import DailyGeminiLimitExceeded, tutor_turn
+from bot.services.llm import TutorLLM, TutorTemporarilyUnavailableError, TutorTimeoutError
 from bot.utils import split_message
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,21 @@ async def _switch_mode(
         )
         for chunk in split_message(reply.text):
             await message.answer(chunk)
+    except DailyGeminiLimitExceeded:
+        await message.answer(texts.GEMINI_DAILY_LIMIT)
+        if mode == "quiz":
+            await state.clear()
+            await repository.update_user(user_id, mode="dialogue")
+    except TutorTimeoutError:
+        await message.answer(texts.LLM_TIMEOUT)
+        if mode == "quiz":
+            await state.clear()
+            await repository.update_user(user_id, mode="dialogue")
+    except TutorTemporarilyUnavailableError:
+        await message.answer(texts.LLM_TEMPORARY_ERROR)
+        if mode == "quiz":
+            await state.clear()
+            await repository.update_user(user_id, mode="dialogue")
     except Exception as exc:
         logger.exception("Mode kickoff failed for user %s (%s)", user_id, type(exc).__name__)
         await message.answer(texts.LLM_ERROR)

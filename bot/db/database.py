@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS mistakes (
     last_seen TEXT NOT NULL,
     UNIQUE(user_id, category)
 );
+CREATE TABLE IF NOT EXISTS gemini_daily_usage (
+    user_id INTEGER NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+    usage_date TEXT NOT NULL,
+    requests INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, usage_date)
+);
 CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id, id);
 CREATE INDEX IF NOT EXISTS idx_vocabulary_user_id ON vocabulary(user_id);
 CREATE INDEX IF NOT EXISTS idx_vocabulary_next_review ON vocabulary(user_id, next_review);

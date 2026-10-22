@@ -49,6 +49,20 @@ async def test_profile_messages_and_parameterized_updates(repository: Repository
 
 
 @pytest.mark.asyncio
+async def test_daily_gemini_request_limit_resets_by_utc_day(repository: Repository) -> None:
+    await add_user(repository)
+    first_day = datetime(2026, 10, 21, 23, 59, tzinfo=UTC)
+
+    assert await repository.consume_daily_gemini_request(42, 2, first_day)
+    assert await repository.consume_daily_gemini_request(42, 2, first_day)
+    assert not await repository.consume_daily_gemini_request(42, 2, first_day)
+    assert await repository.consume_daily_gemini_request(
+        42, 2, first_day + timedelta(minutes=2)
+    )
+    assert await repository.consume_daily_gemini_request(42, 0, first_day)
+
+
+@pytest.mark.asyncio
 async def test_vocabulary_review_intervals_and_stats(repository: Repository) -> None:
     await add_user(repository)
     await repository.add_vocabulary(42, "viaje", "trip", "Buen viaje.")

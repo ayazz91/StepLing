@@ -15,6 +15,10 @@ QUIZ_BLOCK = re.compile(r"\[\[QUIZ_RESULT\]\].*?\[\[/QUIZ_RESULT\]\]", re.I | re
 LEVEL_BLOCK = re.compile(r"\[\[LEVEL_ESTIMATE\]\](.*?)\[\[/LEVEL_ESTIMATE\]\]", re.I | re.S)
 
 
+class DailyGeminiLimitExceeded(RuntimeError):
+    """Raised when the user has exhausted today's configured Gemini request limit."""
+
+
 @dataclass(frozen=True, slots=True)
 class TutorResponse:
     """Tutor text and optional quiz-evaluation signal."""
@@ -37,6 +41,10 @@ async def tutor_turn(
     user = await repository.get_user(telegram_id)
     if user is None:
         raise ValueError("User profile not found")
+    if not await repository.consume_daily_gemini_request(
+        telegram_id, repository.gemini_daily_request_limit
+    ):
+        raise DailyGeminiLimitExceeded
     history = await repository.get_history(telegram_id)
     if save_user_message:
         await repository.save_message(telegram_id, "user", content)

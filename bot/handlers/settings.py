@@ -35,6 +35,12 @@ class SettingsInput(StatesGroup):
     native_custom = State()
 
 
+@router.message(Command("privacy"))
+async def show_privacy(message: Message) -> None:
+    """Explain which learner data is stored and sent to the AI provider."""
+    await message.answer(texts.PRIVACY)
+
+
 @router.message(Command("settings"))
 async def show_settings(
     message: Message, state: FSMContext, repository: Repository,

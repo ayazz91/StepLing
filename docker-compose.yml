@@ -7,8 +7,32 @@ services:
       - .env
     environment:
       DATABASE_PATH: /app/data/tutor.sqlite3
+      BACKUP_PATH: /app/backups
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - tutor-data:/app/data
+      - tutor-backups:/app/backups
+    depends_on:
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    init: true
+    volumes:
+      - tutor-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     read_only: true
     tmpfs:
       - /tmp
@@ -17,3 +41,5 @@ services:
 
 volumes:
   tutor-data:
+  tutor-backups:
+  tutor-redis-data:

@@ -20,9 +20,12 @@ def utc_now() -> datetime:
 class Repository:
     """Provide typed, parameterized operations on the bot database."""
 
-    def __init__(self, connection: aiosqlite.Connection) -> None:
+    def __init__(
+        self, connection: aiosqlite.Connection, gemini_daily_request_limit: int = 100,
+    ) -> None:
         """Create a repository bound to an open SQLite connection."""
         self.connection = connection
+        self.gemini_daily_request_limit = gemini_daily_request_limit
 
     async def create_user(self, telegram_id: int, profile: dict[str, str]) -> None:
         """Insert or update a completed onboarding profile."""
@@ -93,6 +96,29 @@ class Repository:
             (telegram_id, role, content, utc_now().isoformat()),
         )
         await self.connection.commit()
+
+    async def consume_daily_gemini_request(
+        self, telegram_id: int, limit: int, now: datetime | None = None,
+    ) -> bool:
+        """Atomically reserve one Gemini request for the user's UTC day."""
+        if limit == 0:
+            return True
+        usage_date = (now or utc_now()).date().isoformat()
+        await self.connection.execute(
+            "DELETE FROM gemini_daily_usage WHERE usage_date < ?", (usage_date,)
+        )
+        cursor = await self.connection.execute(
+            """INSERT INTO gemini_daily_usage (user_id, usage_date, requests)
+               VALUES (?, ?, 1)
+               ON CONFLICT(user_id, usage_date) DO UPDATE
+                 SET requests = requests + 1
+                 WHERE requests < ?
+               RETURNING requests""",
+            (telegram_id, usage_date, limit),
+        )
+        allowed = await cursor.fetchone() is not None
+        await self.connection.commit()
+        return allowed
 
     async def get_history(self, telegram_id: int, limit: int = 15) -> list[dict[str, str]]:
         """Return the most recent conversation turns in chronological order."""

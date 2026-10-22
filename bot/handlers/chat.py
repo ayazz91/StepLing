@@ -11,8 +11,8 @@ from aiogram.types import Message
 from bot import texts
 from bot.db.repository import Repository
 from bot.handlers.modes import Quiz
-from bot.services.conversation import tutor_turn
-from bot.services.llm import TutorLLM
+from bot.services.conversation import DailyGeminiLimitExceeded, tutor_turn
+from bot.services.llm import TutorLLM, TutorTemporarilyUnavailableError, TutorTimeoutError
 from bot.utils import split_message
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,15 @@ async def chat(
             prompt_template,
             extra_system_instruction=extra_instruction,
         )
+    except DailyGeminiLimitExceeded:
+        await message.answer(texts.GEMINI_DAILY_LIMIT)
+        return
+    except TutorTimeoutError:
+        await message.answer(texts.LLM_TIMEOUT)
+        return
+    except TutorTemporarilyUnavailableError:
+        await message.answer(texts.LLM_TEMPORARY_ERROR)
+        return
     except Exception as exc:
         logger.exception(
             "Tutor request failed for user %s (%s)",

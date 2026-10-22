@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand, Message, TelegramObject
 
 from bot import texts
@@ -71,7 +72,11 @@ class RateLimitMiddleware(BaseMiddleware):
 
 def create_dispatcher(settings_value: Settings, rate_limiter: RateLimiter) -> Dispatcher:
     """Create a dispatcher and register the bot's routers and access policy."""
-    dispatcher = Dispatcher(storage=MemoryStorage())
+    storage = (
+        RedisStorage.from_url(settings_value.redis_url)
+        if settings_value.redis_url else MemoryStorage()
+    )
+    dispatcher = Dispatcher(storage=storage)
     dispatcher.message.outer_middleware(AllowlistMiddleware(settings_value.allowed_user_ids))
     dispatcher.message.outer_middleware(RateLimitMiddleware(rate_limiter))
     dispatcher.callback_query.outer_middleware(AllowlistMiddleware(settings_value.allowed_user_ids))
@@ -98,9 +103,10 @@ async def run(settings_value: Settings) -> None:
     llm: TutorLLM | None = None
     bot: Bot | None = None
     reminder_scheduler: ReminderScheduler | None = None
+    dispatcher: Dispatcher | None = None
     try:
         connection = await database.connect()
-        repository = Repository(connection)
+        repository = Repository(connection, settings_value.gemini_daily_request_limit)
         llm = TutorLLM(settings_value.gemini_api_key, settings_value.gemini_model)
         bot = Bot(token=settings_value.telegram_bot_token)
         rate_limiter = RateLimiter(settings_value.rate_limit_per_minute)
@@ -132,7 +138,11 @@ async def run(settings_value: Settings) -> None:
                     if bot is not None:
                         await bot.session.close()
                 finally:
-                    await database.close()
+                    try:
+                        if dispatcher is not None:
+                            await dispatcher.storage.close()
+                    finally:
+                        await database.close()
 
 
 async def main() -> None:
